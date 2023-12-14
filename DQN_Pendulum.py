@@ -65,7 +65,7 @@ class DQNAgent():
     def select_action(self, state):
         state = torch.from_numpy(state).float().unsqueeze(0)
         if np.random.random() < self.epsilon:
-            action_index = np.random.randint(5)
+            action_index = np.random.randint(5) # 이산화한 액션수 (num_actions)
         else:
             probs = self.eval_net(state)
             action_index = probs.max(1)[1].item()
@@ -88,7 +88,7 @@ class DQNAgent():
 
         with torch.no_grad():
             a_ = self.eval_net(s_).max(1, keepdim=True)[1]
-            q_target = r + 0.9 * self.target_net(s_).gather(1, a_)
+            q_target = r + 0.9 * self.target_net(s_).gather(1, a_) # Gamma = 0.9
         q_eval = self.eval_net(s).gather(1, a)
 
         self.optimizer.zero_grad()
@@ -97,7 +97,7 @@ class DQNAgent():
         nn.utils.clip_grad_norm_(self.eval_net.parameters(), self.max_grad_norm)
         self.optimizer.step()
 
-        if self.training_step % 200 == 0:
+        if self.training_step % 200 == 0: # 200에 한번씩 업데이트
             self.target_net.load_state_dict(self.eval_net.state_dict())
 
         self.epsilon = max(self.epsilon * 0.999, 0.01)
@@ -110,7 +110,7 @@ def main():
 
     training_records = []
     running_reward, running_q = -1000, 0
-    best_reward = -float('inf')
+#    best_reward = -float('inf')
 
     for i_ep in range(1000):
         score = 0
@@ -157,6 +157,8 @@ def main():
     plt.savefig("./dqn.png")
     plt.show()
 
-if __name__ == '__main__':
-    main()
+
+# 'gamma', type=float, default=0.9
+# 'num_actions', type=int, default=5
+
 
