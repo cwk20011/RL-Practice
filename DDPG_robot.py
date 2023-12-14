@@ -20,8 +20,8 @@ class RobotArmModel:
 class ActorNet(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(ActorNet, self).__init__()
-        self.fc1 = nn.Linear(state_dim, 64)
-        self.fc2 = nn.Linear(64, action_dim)
+        self.fc1 = nn.Linear(state_dim, 128)
+        self.fc2 = nn.Linear(128, action_dim)
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
@@ -32,9 +32,9 @@ class ActorNet(nn.Module):
 class CriticNet(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(CriticNet, self).__init__()
-        self.fc_state = nn.Linear(state_dim, 64)  # 수정: 뉴런 수 증가
-        self.fc_action = nn.Linear(action_dim, 64)  # 수정: 뉴런 수 증가
-        self.fc2 = nn.Linear(128, 1)  # 수정: 입력 차원 변경
+        self.fc_state = nn.Linear(state_dim, 128)  # 수정: 뉴런 수 증가
+        self.fc_action = nn.Linear(action_dim, 128)  # 수정: 뉴런 수 증가
+        self.fc2 = nn.Linear(256, 1)  # 수정: 입력 차원 변경
 
     def forward(self, state, action):
         x_state = F.relu(self.fc_state(state))
@@ -42,10 +42,40 @@ class CriticNet(nn.Module):
         x = torch.cat((x_state, x_action), dim=1)
         x = F.relu(self.fc2(x))
         return x
+  
+# Replay 메모리 클래스
+class Memory:
+    def __init__(self, capacity):
+        self.memory = []
+        self.capacity = capacity
+        self.data_pointer = 0
+
+    def update(self, transition):
+        if len(self.memory) < self.capacity:
+            self.memory.append(transition)
+        else:
+            self.memory[self.data_pointer] = transition
+        self.data_pointer = (self.data_pointer + 1) % self.capacity
+
+    def sample(self, batch_size):
+        if len(self.memory) < batch_size:
+            return []
+        return np.random.choice(self.memory, batch_size, replace=False)
+
+# Transition 클래스 정의
+class Transition:
+    def __init__(self, state=None, action=None, reward=None, next_state=None, done=None):
+        self.state = state
+        self.action = action
+        self.reward = reward
+        self.next_state = next_state
+        self.done = done
+
+
 
 # DDPG 에이전트 클래스
 class DDPGAgent:
-    def __init__(self, state_dim, action_dim, noise_std=0.05):  # 수정: 노이즈 표준 편차 줄임
+    def __init__(self, state_dim, action_dim, noise_std=0.05):
         # Actor, Critic 네트워크 및 타겟 네트워크 초기화
         self.actor_net = ActorNet(state_dim, action_dim)
         self.critic_net = CriticNet(state_dim, action_dim)
@@ -53,14 +83,14 @@ class DDPGAgent:
         self.target_critic_net = CriticNet(state_dim, action_dim)
 
         # Actor, Critic의 옵티마이저 초기화
-        self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=1e-4)  # 수정: 학습률 조정
-        self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=1e-4)  # 수정: 학습률 조정
+        self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=1e-3)  # 수정: 학습률 조정
+        self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=1e-3)  # 수정: 학습률 조정
 
         # Replay 메모리 초기화
         self.memory = Memory(5000)  # 수정: 메모리 크기 증가
 
         # 타겟 네트워크 업데이트 주기
-        self.target_update_freq = 160  # 수정: 업데이트 주기 감소
+        self.target_update_freq = 150  # 수정: 업데이트 주기 감소
         self.target_update_counter = 0
 
         # 추가: 노이즈 설정
@@ -108,33 +138,6 @@ class DDPGAgent:
 
         self.target_update_counter += 1
 
-# Replay 메모리 클래스
-class Memory:
-    def __init__(self, capacity):
-        self.memory = []
-        self.capacity = capacity
-        self.data_pointer = 0
-
-    def update(self, transition):
-        if len(self.memory) < self.capacity:
-            self.memory.append(transition)
-        else:
-            self.memory[self.data_pointer] = transition
-        self.data_pointer = (self.data_pointer + 1) % self.capacity
-
-    def sample(self, batch_size):
-        if len(self.memory) < batch_size:
-            return []
-        return np.random.choice(self.memory, batch_size, replace=False)
-
-# Transition 클래스 정의
-class Transition:
-    def __init__(self, state=None, action=None, reward=None, next_state=None, done=None):
-        self.state = state
-        self.action = action
-        self.reward = reward
-        self.next_state = next_state
-        self.done = done
 
 # 환경 초기화
 robot_arm = RobotArmModel()
@@ -144,17 +147,20 @@ action_dim = 1  # 각도의 변화량
 # DDPG 에이전트 초기화
 agent = DDPGAgent(state_dim, action_dim)
 
+
 # 학습 루프
 episode_rewards = []
 
-for episode in range(3000):
+
+for episode in range(5000):
     state = np.array([robot_arm.angle])
     episode_reward = 0
 
-    for _ in range(20):
+    for _ in range(100):
         action = agent.select_action(state)
         next_state = np.array([robot_arm.move(action)])
-        reward = -(next_state - np.array([180.0]))**2
+        # reward = -(next_state - np.array([180.0]))**2
+        reward = -np.abs(next_state - np.array([180.0]))  # 예시: 절대값을 사용하여 더 높은 보상 부여
         episode_reward += reward
 
         agent.train(state, action, reward, next_state, False)
@@ -168,8 +174,9 @@ for episode in range(3000):
 # 최종 로봇 팔 각도 시각화
 print(f"Final Robot Arm Angle: {robot_arm.angle}")
 
+
 # 보상 그래프 플로팅
-plt.plot(np.arange(100, 3001, 100), episode_rewards)
+plt.plot(np.arange(100, 5001, 100), episode_rewards)
 plt.xlabel('Episode')
 plt.ylabel('Average Reward')
 plt.title('Training Progress')
