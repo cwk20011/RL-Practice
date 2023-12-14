@@ -75,7 +75,7 @@ class Transition:
 
 # DDPG 에이전트 클래스
 class DDPGAgent:
-    def __init__(self, state_dim, action_dim, noise_std=0.05):
+    def __init__(self, state_dim, action_dim, noise_std=0.2):
         # Actor, Critic 네트워크 및 타겟 네트워크 초기화
         self.actor_net = ActorNet(state_dim, action_dim)
         self.critic_net = CriticNet(state_dim, action_dim)
@@ -83,14 +83,14 @@ class DDPGAgent:
         self.target_critic_net = CriticNet(state_dim, action_dim)
 
         # Actor, Critic의 옵티마이저 초기화
-        self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=1e-3)  # 수정: 학습률 조정
+        self.actor_optimizer = optim.Adam(self.actor_net.parameters(), lr=1e-4)  # 수정: 학습률 조정
         self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=1e-3)  # 수정: 학습률 조정
 
         # Replay 메모리 초기화
         self.memory = Memory(5000)  # 수정: 메모리 크기 증가
 
         # 타겟 네트워크 업데이트 주기
-        self.target_update_freq = 150  # 수정: 업데이트 주기 감소
+        self.target_update_freq = 300  # 수정: 업데이트 주기 감소
         self.target_update_counter = 0
 
         # 추가: 노이즈 설정
@@ -112,6 +112,10 @@ class DDPGAgent:
 
         batch = Transition(*zip(*transitions))
 
+        # 추가: Critic 네트워크 업데이트 시 보상 스케일링
+        scale_factor = 10.0
+        reward /= scale_factor  # 보상 스케일링
+
         # 타겟 Q 값 계산
         with torch.no_grad():
             target_actions = self.target_actor_net(batch.next_state)
@@ -120,7 +124,12 @@ class DDPGAgent:
             target_q_values += batch.reward
 
         # Critic 네트워크 업데이트
-        critic_loss = F.smooth_l1_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)
+        # critic_loss = F.smooth_l1_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)
+        # self.critic_optimizer.zero_grad()
+        # critic_loss.backward()
+        # self.critic_optimizer.step()
+
+        critic_loss = F.mse_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)  # Changed loss function
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
@@ -139,20 +148,21 @@ class DDPGAgent:
         self.target_update_counter += 1
 
 
+
 # 환경 초기화
 robot_arm = RobotArmModel()
 state_dim = 1  # 로봇 팔 각도
 action_dim = 1  # 각도의 변화량
 
 # DDPG 에이전트 초기화
-agent = DDPGAgent(state_dim, action_dim)
+agent = DDPGAgent(state_dim, action_dim, noise_std=0.2)
 
 
 # 학습 루프
 episode_rewards = []
 
 
-for episode in range(5000):
+for episode in range(10000):
     state = np.array([robot_arm.angle])
     episode_reward = 0
 
@@ -160,7 +170,8 @@ for episode in range(5000):
         action = agent.select_action(state)
         next_state = np.array([robot_arm.move(action)])
         # reward = -(next_state - np.array([180.0]))**2
-        reward = -np.abs(next_state - np.array([180.0]))  # 예시: 절대값을 사용하여 더 높은 보상 부여
+        # reward = -np.abs(next_state - np.array([180.0]))  # 예시: 절대값을 사용하여 더 높은 보상 부여
+        reward = -np.exp(-0.5 * np.abs(next_state - np.array([180.0]))**2)
         episode_reward += reward
 
         agent.train(state, action, reward, next_state, False)
@@ -169,14 +180,14 @@ for episode in range(5000):
 
     if (episode + 1) % 100 == 0:
         episode_rewards.append(episode_reward.mean())
-        print(f"Episode: {episode+1}, Reward: {episode_reward.mean()}")
+        print(f"Episode: {episode+1}, Reward: {episode_reward.mean()}, Robot Arm Angle: {robot_arm.angle}")
 
 # 최종 로봇 팔 각도 시각화
 print(f"Final Robot Arm Angle: {robot_arm.angle}")
 
 
 # 보상 그래프 플로팅
-plt.plot(np.arange(100, 5001, 100), episode_rewards)
+plt.plot(np.arange(100, 10001, 100), episode_rewards)
 plt.xlabel('Episode')
 plt.ylabel('Average Reward')
 plt.title('Training Progress')
