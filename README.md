@@ -66,7 +66,7 @@ python DDPG_Robot_Arm.py
 ## 구조
 실행명령은 아래와 같습니다.
 ```
-python DDPG_Robot_Arm.py
+python policy_gradient.py
 ```
 프로젝트는 다음과 같은 주요 구성 요소로 구성되어 있습니다.
 
