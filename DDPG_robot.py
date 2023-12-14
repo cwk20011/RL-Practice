@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 # 로봇 팔을 모델링한 클래스
 class RobotArmModel:
     def __init__(self):
-        self.angle = 0.0
+        # 초기 각도를 랜덤으로 설정 (0도부터 360도 사이)
+        self.angle = np.random.uniform(0, 360)
 
     def move(self, action):
         # 주어진 행동을 사용하여 로봇 팔의 각도 업데이트
@@ -25,16 +26,16 @@ class ActorNet(nn.Module):
 
     def forward(self, state):
         x = F.relu(self.fc1(state))
-        x = torch.tanh(self.fc2(x))  # -1과 1 사이의 값으로 스케일 조정
+        x = torch.tanh(self.fc2(x))
         return x
 
 # Critic 네트워크 클래스
 class CriticNet(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(CriticNet, self).__init__()
-        self.fc_state = nn.Linear(state_dim, 128)  # 수정: 뉴런 수 증가
-        self.fc_action = nn.Linear(action_dim, 128)  # 수정: 뉴런 수 증가
-        self.fc2 = nn.Linear(256, 1)  # 수정: 입력 차원 변경
+        self.fc_state = nn.Linear(state_dim, 128)
+        self.fc_action = nn.Linear(action_dim, 128)
+        self.fc2 = nn.Linear(256, 1)
 
     def forward(self, state, action):
         x_state = F.relu(self.fc_state(state))
@@ -42,7 +43,7 @@ class CriticNet(nn.Module):
         x = torch.cat((x_state, x_action), dim=1)
         x = F.relu(self.fc2(x))
         return x
-  
+
 # Replay 메모리 클래스
 class Memory:
     def __init__(self, capacity):
@@ -71,11 +72,9 @@ class Transition:
         self.next_state = next_state
         self.done = done
 
-
-
 # DDPG 에이전트 클래스
 class DDPGAgent:
-    def __init__(self, state_dim, action_dim, noise_std=0.2):
+    def __init__(self, state_dim, action_dim, noise_std=0.1):
         # Actor, Critic 네트워크 및 타겟 네트워크 초기화
         self.actor_net = ActorNet(state_dim, action_dim)
         self.critic_net = CriticNet(state_dim, action_dim)
@@ -87,7 +86,7 @@ class DDPGAgent:
         self.critic_optimizer = optim.Adam(self.critic_net.parameters(), lr=1e-3)  # 수정: 학습률 조정
 
         # Replay 메모리 초기화
-        self.memory = Memory(5000)  # 수정: 메모리 크기 증가
+        self.memory = Memory(10000)  # 수정: 메모리 크기 증가
 
         # 타겟 네트워크 업데이트 주기
         self.target_update_freq = 300  # 수정: 업데이트 주기 감소
@@ -116,6 +115,13 @@ class DDPGAgent:
         scale_factor = 10.0
         reward /= scale_factor  # 보상 스케일링
 
+        # 최종 각도에 도달했을 때 추가적인 보상
+        done_reward = 100.0  # 보상 설정
+        done_reward *= np.abs(self.robot_arm.angle - 180.0) < 5.0  # 종료 조건
+
+        # 최종 각도에 따른 리워드 및 종료 조건 설정
+        reward = -np.abs(self.robot_arm.angle - 180.0) + done_reward
+
         # 타겟 Q 값 계산
         with torch.no_grad():
             target_actions = self.target_actor_net(batch.next_state)
@@ -124,12 +130,7 @@ class DDPGAgent:
             target_q_values += batch.reward
 
         # Critic 네트워크 업데이트
-        # critic_loss = F.smooth_l1_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)
-        # self.critic_optimizer.zero_grad()
-        # critic_loss.backward()
-        # self.critic_optimizer.step()
-
-        critic_loss = F.mse_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)  # Changed loss function
+        critic_loss = F.mse_loss(self.critic_net(batch.state, batch.action).squeeze(), target_q_values)
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
@@ -147,48 +148,61 @@ class DDPGAgent:
 
         self.target_update_counter += 1
 
+# Main 클래스
+class Main:
+    def __init__(self):
+        # 환경 초기화
+        self.robot_arm = RobotArmModel()
+        self.state_dim = 1  # 로봇 팔 각도
+        self.action_dim = 1  # 각도의 변화량
+
+        # DDPG 에이전트 초기화
+        self.agent = DDPGAgent(self.state_dim, self.action_dim, noise_std=0.1)
+
+        # 학습 루프
+        self.episode_rewards = []
+
+    def run(self):
+        for episode in range(3000):
+            # 초기 각도를 랜덤으로 설정
+            self.robot_arm = RobotArmModel()
+            state = np.array([self.robot_arm.angle])
+            episode_reward = 0
+
+            for _ in range(100):
+                action = self.agent.select_action(state)
+                next_state = np.array([self.robot_arm.move(action)])
+
+                # 최종 각도에 따른 리워드 및 종료 조건 설정
+                done_reward = 100.0  # 보상 설정
+                done_reward *= np.abs(self.robot_arm.angle - 180.0) < 5.0  # 종료 조건
+                reward = -np.abs(self.robot_arm.angle - 180.0) + done_reward
+
+                episode_reward += reward
+
+                self.agent.train(state, action, reward, next_state, False)
+
+                state = next_state
+
+                if done_reward > 0:
+                    break
 
 
-# 환경 초기화
-robot_arm = RobotArmModel()
-state_dim = 1  # 로봇 팔 각도
-action_dim = 1  # 각도의 변화량
+            if (episode + 1) % 100 == 0:
+                self.episode_rewards.append(episode_reward.mean())
+                print(f"Episode: {episode + 1}, Reward: {episode_reward.mean()}, Robot Arm Angle: {self.robot_arm.angle}")
 
-# DDPG 에이전트 초기화
-agent = DDPGAgent(state_dim, action_dim, noise_std=0.2)
+        # 최종 로봇 팔 각도 시각화
+        print(f"Final Robot Arm Angle: {self.robot_arm.angle}")
 
+        # 보상 그래프 플로팅
+        plt.plot(np.arange(100, 3001, 100), self.episode_rewards)
+        plt.xlabel('Episode')
+        plt.ylabel('Average Reward')
+        plt.title('Training Progress')
+        plt.show()
 
-# 학습 루프
-episode_rewards = []
+if __name__ == "__main__":
+    main_instance = Main()
+    main_instance.run()
 
-
-for episode in range(10000):
-    state = np.array([robot_arm.angle])
-    episode_reward = 0
-
-    for _ in range(100):
-        action = agent.select_action(state)
-        next_state = np.array([robot_arm.move(action)])
-        # reward = -(next_state - np.array([180.0]))**2
-        # reward = -np.abs(next_state - np.array([180.0]))  # 예시: 절대값을 사용하여 더 높은 보상 부여
-        reward = -np.exp(-0.5 * np.abs(next_state - np.array([180.0]))**2)
-        episode_reward += reward
-
-        agent.train(state, action, reward, next_state, False)
-
-        state = next_state
-
-    if (episode + 1) % 100 == 0:
-        episode_rewards.append(episode_reward.mean())
-        print(f"Episode: {episode+1}, Reward: {episode_reward.mean()}, Robot Arm Angle: {robot_arm.angle}")
-
-# 최종 로봇 팔 각도 시각화
-print(f"Final Robot Arm Angle: {robot_arm.angle}")
-
-
-# 보상 그래프 플로팅
-plt.plot(np.arange(100, 10001, 100), episode_rewards)
-plt.xlabel('Episode')
-plt.ylabel('Average Reward')
-plt.title('Training Progress')
-plt.show()
