@@ -5,9 +5,9 @@
 
 ## 구조
 실행명령은 아래와 같습니다.
-'''
+```
 python DDPG_Robot_Arm.py
-'''
+```
 프로젝트는 다음과 같은 주요 구성 요소로 구성되어 있습니다.
 
 - **`RobotArmModel` 클래스:** 초기화된 각도를 가진 로봇 팔을 모델링합니다.
@@ -65,9 +65,9 @@ python DDPG_Robot_Arm.py
 
 ## 구조
 실행명령은 아래와 같습니다.
-'''
+```
 python DDPG_Robot_Arm.py
-'''
+```
 프로젝트는 다음과 같은 주요 구성 요소로 구성되어 있습니다.
 
 - **`PolicyNetwork` 클래스:** 4개의 Action을 출력할 학습 네트워크를 정의
