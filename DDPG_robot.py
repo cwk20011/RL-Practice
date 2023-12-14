@@ -45,7 +45,7 @@ class CriticNet(nn.Module):
 
 # DDPG 에이전트 클래스
 class DDPGAgent:
-    def __init__(self, state_dim, action_dim):
+    def __init__(self, state_dim, action_dim, noise_std=0.05):  # 수정: 노이즈 표준 편차 줄임
         # Actor, Critic 네트워크 및 타겟 네트워크 초기화
         self.actor_net = ActorNet(state_dim, action_dim)
         self.critic_net = CriticNet(state_dim, action_dim)
@@ -64,7 +64,7 @@ class DDPGAgent:
         self.target_update_counter = 0
 
         # 추가: 노이즈 설정
-        self.noise_std = 0.1
+        self.noise_std = noise_std
 
     def select_action(self, state):
         # 주어진 상태에서 액션 선택
@@ -145,6 +145,8 @@ action_dim = 1  # 각도의 변화량
 agent = DDPGAgent(state_dim, action_dim)
 
 # 학습 루프
+episode_rewards = []
+
 for episode in range(3000):
     state = np.array([robot_arm.angle])
     episode_reward = 0
@@ -160,7 +162,15 @@ for episode in range(3000):
         state = next_state
 
     if (episode + 1) % 100 == 0:
+        episode_rewards.append(episode_reward.mean())
         print(f"Episode: {episode+1}, Reward: {episode_reward.mean()}")
 
 # 최종 로봇 팔 각도 시각화
 print(f"Final Robot Arm Angle: {robot_arm.angle}")
+
+# 보상 그래프 플로팅
+plt.plot(np.arange(100, 3001, 100), episode_rewards)
+plt.xlabel('Episode')
+plt.ylabel('Average Reward')
+plt.title('Training Progress')
+plt.show()
