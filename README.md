@@ -64,10 +64,15 @@ python DDPG_Robot_Arm.py
 이 프로젝트는 Policy Gradient를 사용하여 이족 로봇이 지형을 지나가도록 로봇 제어에 강화 학습 모델을 적용하여 훈련하는 것을 목표로 합니다. 로봇은 초기 자세에서 시작하여 전진하는데, 에이전트는 주어진 상태에서 로봇 관절 4개에 최적의 액션을 선택하여 넘어지지 않고 앞으로 나아갑니다.
 
 ## 구조
-실행명령은 아래와 같습니다.
+학습 명령은 아래와 같습니다.
 ```
-python policy_gradient.py
+python PolicyGradient.py
 ```
+추론 명령은 아래와 같습니다. (./models 경로의 모델을 사용)
+```
+python PolicyGradient_inference.py
+```
+
 프로젝트는 다음과 같은 주요 구성 요소로 구성되어 있습니다.
 
 - **`PolicyNetwork` 클래스:** 4개의 Action을 출력할 학습 네트워크를 정의
